@@ -31,6 +31,17 @@ function parseQuotes(rows){
   });
   return out;
 }
+// prices.json 格式：{date:"2026-11-03", map:{"2330":["台積電",1450], ...}}
+function parsePricesFile(p){
+  const out={};
+  if(!p || typeof p.map!=="object" || !p.map) return out;
+  Object.entries(p.map).forEach(([code,v])=>{
+    if(!Array.isArray(v)) return;
+    const close=toNum(v[1]);
+    if(close>0) out[code]={name:String(v[0]||""),close,date:p.date||""};
+  });
+  return out;
+}
 function summarizeMonth(list){
   let I=0,O=0,S=0; const byCat={};
   list.forEach(e=>{
@@ -48,7 +59,7 @@ function valueHolding(h, quote){
   return {price,cost,mv,pl:mv-cost,pct:cost>0?(mv-cost)/cost:null};
 }
 
-if(typeof module!=="undefined"){ module.exports={toNum,rocToIso,parseQuotes,summarizeMonth,valueHolding}; }
+if(typeof module!=="undefined"){ module.exports={toNum,rocToIso,parseQuotes,parsePricesFile,summarizeMonth,valueHolding}; }
 
 /* ---------- 介面 ---------- */
 if(typeof document!=="undefined") (function(){
@@ -235,22 +246,30 @@ if(typeof document!=="undefined") (function(){
   async function refreshQuotes(){
     if(fetching) return; fetching=true;
     $("refresh").disabled=true; $("refresh").textContent="更新中…";
+    const errBox=$("priceErr");
+    const done=()=>{ fetching=false; $("refresh").disabled=false; $("refresh").textContent="更新股價"; renderStocks(); };
+    // 1) 先讀 GitHub 每天自動產生的 prices.json（同一個網站，不會被擋）
+    try{
+      const p=await getJson("prices.json?t="+Date.now());
+      const map=parsePricesFile(p);
+      if(Object.keys(map).length){
+        quotes={map,date:p.date||"",fetchedAt:Date.now()}; save(KEY.quotes,quotes);
+        errBox.hidden=true; done(); return;
+      }
+    }catch(e){}
+    // 2) 退而求其次：直接向證交所／櫃買讀取
     const [a,b]=await Promise.allSettled([getJson(TWSE_URL),getJson(TPEX_URL)]);
     const map={};
     let latest="";
     [a,b].forEach(r=>{ if(r.status==="fulfilled"){ const q=parseQuotes(r.value); Object.assign(map,q); Object.values(q).forEach(v=>{ if(v.date>latest) latest=v.date; }); } });
-    fetching=false; $("refresh").disabled=false; $("refresh").textContent="更新股價";
-    const errBox=$("priceErr");
     if(Object.keys(map).length){
       quotes={map,date:latest,fetchedAt:Date.now()}; save(KEY.quotes,quotes);
-      const miss=[]; if(a.status!=="fulfilled") miss.push("上市"); if(b.status!=="fulfilled") miss.push("上櫃");
-      if(miss.length){ errBox.textContent="這次讀不到"+miss.join("、")+"股票的資料，那部分會沿用手動填的價格。"; errBox.hidden=false; }
-      else errBox.hidden=true;
+      errBox.hidden=true;
     } else {
-      errBox.textContent="目前讀不到證交所與櫃買中心的資料，可能是網路不穩，或對方暫時不開放這種讀取方式。可以點每檔的股價手動填入最新收盤價，損益一樣會算。";
+      errBox.textContent="目前讀不到股價資料。如果剛設定好自動更新，請到 GitHub 的 Actions 頁面手動執行一次「更新台股收盤價」。在那之前，可以點每檔的股價手動填入，損益一樣會算。";
       errBox.hidden=false;
     }
-    renderStocks();
+    done();
   }
   function maybeAutoRefresh(){
     if(!holdings.length) return;

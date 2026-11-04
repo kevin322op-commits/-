@@ -1,0 +1,97 @@
+name: 更新台股收盤價
+
+on:
+  schedule:
+    # 台灣時間週一到週五 15:10、17:40、20:40（GitHub 用 UTC 時間）
+    - cron: "10 7 * * 1-5"
+    - cron: "40 9 * * 1-5"
+    - cron: "40 12 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 抓取證交所與櫃買中心收盤價
+        run: |
+          python3 - <<'PY'
+          import json, ssl, urllib.request, datetime, sys
+
+          SOURCES = [
+              ("上市", "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"),
+              ("上櫃", "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes"),
+          ]
+          ctx = ssl.create_default_context()
+          # 證交所憑證在較新的 Python 嚴格檢查下可能失敗，放寬這一項（仍驗證憑證）
+          if hasattr(ssl, "VERIFY_X509_STRICT"):
+              ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+
+          def num(v):
+              try:
+                  return float(str(v).replace(",", "").strip())
+              except Exception:
+                  return 0.0
+
+          def roc(s):
+              t = "".join(ch for ch in str(s or "") if ch.isdigit())
+              if len(t) == 7:
+                  return f"{int(t[:3]) + 1911}-{t[3:5]}-{t[5:7]}"
+              if len(t) == 8:
+                  return f"{t[:4]}-{t[4:6]}-{t[6:8]}"
+              return ""
+
+          prices, latest, ok = {}, "", []
+          for label, url in SOURCES:
+              try:
+                  req = urllib.request.Request(url, headers={"User-Agent": "xiaozhangben-price-bot", "Accept": "application/json"})
+                  with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
+                      rows = json.load(r)
+                  n = 0
+                  for row in rows:
+                      code = str(row.get("Code") or row.get("SecuritiesCompanyCode") or "").strip()
+                      name = str(row.get("Name") or row.get("CompanyName") or "").strip()
+                      close = num(row.get("ClosingPrice", row.get("Close")))
+                      if code and close > 0:
+                          prices[code] = [name, close]
+                          n += 1
+                          d = roc(row.get("Date"))
+                          if d > latest:
+                              latest = d
+                  print(f"{label}: {n} 檔")
+                  if n:
+                      ok.append(label)
+              except Exception as e:
+                  print(f"{label} 讀取失敗: {e}")
+
+          if not prices:
+              print("兩個來源都讀不到資料，這次不更新檔案。")
+              sys.exit(1)
+
+          tw = datetime.timezone(datetime.timedelta(hours=8))
+          out = {
+              "date": latest,
+              "updatedAt": datetime.datetime.now(tw).isoformat(timespec="minutes"),
+              "sources": ok,
+              "map": prices,
+          }
+          with open("prices.json", "w", encoding="utf-8") as f:
+              json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+          print(f"完成：{len(prices)} 檔，資料日期 {latest}")
+          PY
+
+      - name: 存回 repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add prices.json
+          if git diff --cached --quiet; then
+            echo "股價沒有變動，不需要更新。"
+          else
+            git commit -m "更新台股收盤價"
+            git push
+          fi
