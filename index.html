@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>小帳本</title>
+<meta name="theme-color" content="#1f6f62">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="小帳本">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: one calm column like a pocket ledger, three views switched from a bottom tab bar */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --ink:#1d2a27; --muted:#62716d; --line:#dde3e1;
+  --accent:#1f6f62; --accent-soft:#e1efec;
+  --in:#2c7a4b; --out:#b4483a; --save:#3a5fa8;
+  --in-soft:#e5f2ea; --out-soft:#f8e7e4; --save-soft:#e6ecf8;
+  --up:#c8372d; --down:#1e8a4c;   /* 台股慣例：紅漲綠跌 */
+  --display:"Noto Serif TC","Songti TC",serif;
+  --body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#121816; --surface:#1a2220; --ink:#e4ece9; --muted:#97a6a1; --line:#2b3633;
+  --accent:#5fbfae; --accent-soft:#1f3532;
+  --in:#6cc48f; --out:#ec8a7c; --save:#8fa9e6;
+  --in-soft:#1c3226; --out-soft:#3a2321; --save-soft:#202b42;
+  --up:#f0796c; --down:#5cc98a; color-scheme:dark}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-size:24px;margin:0;letter-spacing:.04em}
+.month{display:flex;align-items:center;gap:4px}
+.month span{min-width:7.5em;text-align:center;font-weight:500}
+.icon-btn{border:1px solid var(--line);background:var(--surface);width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.icon-btn:hover{color:var(--ink);border-color:var(--muted)}
+
+.notice{font-size:13px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.notice.sample{border-color:var(--save);color:var(--ink);background:var(--save-soft)}
+.notice.warn{border-color:var(--out);color:var(--ink);background:var(--out-soft)}
+.link{background:none;border:0;color:var(--accent);padding:0;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+
+.summary{background:var(--surface);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:16px;box-shadow:0 1px 0 var(--line)}
+.label{font-size:12px;color:var(--muted);letter-spacing:.08em}
+.big{font-family:var(--num);font-size:34px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.trio div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.trio .v{font-family:var(--num);font-weight:500;font-size:16px;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.v.in{color:var(--in)}.v.out{color:var(--out)}.v.save{color:var(--save)}
+.rate{display:flex;flex-direction:column;gap:6px}
+.rate-row{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden;position:relative}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--save);border-radius:4px}
+.bar .goal{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--muted);left:20%}
+.hint{font-size:13px;color:var(--muted);margin:0}
+
+.card{background:var(--surface);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+h2{font-size:16px;margin:0;font-weight:700}
+.h-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--bg);border-radius:10px;padding:4px;gap:4px}
+.seg button{border:0;background:none;padding:8px 4px;border-radius:7px;font-weight:500;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg button[data-t="out"][aria-pressed="true"]{color:var(--out)}
+.seg button[data-t="in"][aria-pressed="true"]{color:var(--in)}
+.seg button[data-t="save"][aria-pressed="true"]{color:var(--save)}
+.amount{display:flex;align-items:baseline;gap:8px;border-bottom:2px solid var(--line);padding-bottom:6px}
+.amount:focus-within{border-color:var(--accent)}
+.amount span{color:var(--muted);font-family:var(--num)}
+.amount input{border:0;background:none;outline:none;font-family:var(--num);font-size:30px;font-weight:600;width:100%;min-width:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{border:1px solid var(--line);background:none;border-radius:999px;padding:5px 12px;font-size:14px}
+.chips button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:500}
+.row{display:grid;grid-template-columns:1fr auto;gap:10px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld span{font-size:12px;color:var(--muted)}
+.field{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 12px;width:100%;min-width:0}
+.primary{border:0;background:var(--accent);color:var(--surface);border-radius:12px;padding:12px;font-weight:700;font-size:16px}
+.primary:hover{filter:brightness(1.07)}
+.primary:disabled{opacity:.6;cursor:default}
+.ghost{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;font-weight:500}
+.ghost:hover{border-color:var(--muted)}
+.danger{border:1px solid var(--out);color:var(--out);background:none;border-radius:10px;padding:8px 14px;font-weight:500}
+.danger.armed{background:var(--out);color:var(--surface)}
+.err{color:var(--out);font-size:13px;margin:0}
+.ok{color:var(--accent);font-size:13px;margin:0}
+
+.cats{display:flex;flex-direction:column;gap:10px}
+.cat{display:grid;grid-template-columns:4.5em 1fr auto;align-items:center;gap:10px;font-size:14px}
+.cat .bar i{background:var(--out)}
+.cat .num{color:var(--muted);font-size:13px;text-align:right;min-width:6.5em}
+
+.day{display:flex;flex-direction:column}
+.day-h{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding:6px 0;border-bottom:1px solid var(--line)}
+.item{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.tag{font-size:12px;padding:2px 8px;border-radius:6px;font-weight:500;white-space:nowrap}
+.tag.out{background:var(--out-soft);color:var(--out)}.tag.in{background:var(--in-soft);color:var(--in)}.tag.save{background:var(--save-soft);color:var(--save)}
+.item .note{min-width:0;overflow-wrap:anywhere;font-size:14px}
+.item .note small{display:block;color:var(--muted);font-size:12px}
+.item .amt{font-family:var(--num);font-weight:500;font-variant-numeric:tabular-nums}
+.del{border:0;background:none;color:var(--muted);font-size:13px;padding:4px 6px;border-radius:6px}
+.del:hover{color:var(--out)}
+.del.confirm{background:var(--out);color:var(--surface)}
+.empty{color:var(--muted);text-align:center;padding:18px 8px;font-size:14px;display:flex;flex-direction:column;gap:8px;align-items:center}
+
+/* holdings */
+.up{color:var(--up)}.down{color:var(--down)}
+.hold{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.hold:last-child{border-bottom:0}
+.hold .nm{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.hold .nm small{font-family:var(--num);color:var(--muted);font-weight:500;margin-right:6px}
+.hold .mv{font-family:var(--num);font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+.hold .sub{font-size:13px;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.hold .pl{font-family:var(--num);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.hold .acts{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end}
+.price-btn{border:1px dashed var(--line);background:none;border-radius:6px;padding:1px 6px;font-family:var(--num);font-size:13px}
+.price-btn:hover{border-color:var(--accent);color:var(--accent)}
+.pill{font-size:11px;padding:1px 6px;border-radius:5px;background:var(--bg);color:var(--muted)}
+.price-edit{display:flex;gap:6px;align-items:center}
+.price-edit input{width:6.5em;padding:4px 8px}
+
+/* tab bar */
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
+  display:grid;grid-template-columns:repeat(3,1fr);
+  padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav.tabs button{border:0;background:none;padding:10px 4px 12px;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);font-size:12px}
+nav.tabs button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
+textarea.field{min-height:90px;font-family:var(--num);font-size:12px}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .4s ease}}
+@media (max-width:420px){.big{font-size:28px}.trio .v{font-size:14px}.row3{grid-template-columns:1fr 1fr}.row3 .fld:first-child{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ========== 記帳 ========== -->
+<main id="view-ledger">
+ <div class="wrap">
+  <header>
+    <h1>小帳本</h1>
+    <div class="month">
+      <button class="icon-btn" id="prev" aria-label="上個月">‹</button>
+      <span id="monthLabel"></span>
+      <button class="icon-btn" id="next" aria-label="下個月">›</button>
+    </div>
+  </header>
+  <div class="notice sample" id="sampleBar" hidden><span>你正在看範例資料，這些不會被儲存。</span><button class="link" id="exitSample">清除範例，開始記我的帳</button></div>
+
+  <section class="summary" aria-label="本月總覽">
+    <div>
+      <div class="label">本月還剩可用</div>
+      <div class="big" id="left">NT$ 0</div>
+    </div>
+    <div class="trio">
+      <div><span class="label">收入</span><span class="v in" id="sumIn">0</span></div>
+      <div><span class="label">支出</span><span class="v out" id="sumOut">0</span></div>
+      <div><span class="label">存起來／投資</span><span class="v save" id="sumSave">0</span></div>
+    </div>
+    <div class="rate">
+      <div class="rate-row"><span>儲蓄率（存起來 ÷ 收入）</span><span class="num" id="rateText">—</span></div>
+      <div class="bar"><i id="rateBar" style="width:0%"></i><span class="goal" title="20% 參考線"></span></div>
+      <p class="hint" id="rateHint"></p>
+    </div>
+  </section>
+
+  <form class="card" id="form" autocomplete="off">
+    <h2>記一筆</h2>
+    <div class="seg" role="group" aria-label="類型">
+      <button type="button" data-t="out" aria-pressed="true">支出</button>
+      <button type="button" data-t="in" aria-pressed="false">收入</button>
+      <button type="button" data-t="save" aria-pressed="false">存起來</button>
+    </div>
+    <label class="amount"><span>NT$</span><input id="amount" inputmode="decimal" placeholder="0" aria-label="金額"></label>
+    <div class="chips" id="chips" role="group" aria-label="分類"></div>
+    <div class="row">
+      <input class="field" id="note" placeholder="備註（可不填），例如：午餐便當" maxlength="40">
+      <input class="field" id="date" type="date" aria-label="日期">
+    </div>
+    <p class="err" id="err" hidden></p>
+    <button class="primary" type="submit">記下來</button>
+  </form>
+
+  <section class="card" aria-label="支出分類">
+    <h2>錢花去哪了</h2>
+    <div class="cats" id="cats"></div>
+  </section>
+
+  <section class="card" aria-label="明細">
+    <h2>本月明細</h2>
+    <div id="list"></div>
+  </section>
+ </div>
+</main>
+
+<!-- ========== 持股 ========== -->
+<main id="view-stocks" hidden>
+ <div class="wrap">
+  <header><h1>我的持股</h1></header>
+
+  <section class="summary" aria-label="持股總覽">
+    <div>
+      <div class="label">總市值</div>
+      <div class="big" id="mvTotal">NT$ 0</div>
+    </div>
+    <div class="trio">
+      <div><span class="label">投入成本</span><span class="v" id="costTotal">0</span></div>
+      <div><span class="label">未實現損益</span><span class="v" id="plTotal">0</span></div>
+      <div><span class="label">報酬率</span><span class="v" id="plPct">—</span></div>
+    </div>
+    <div class="h-row">
+      <span class="hint" id="priceInfo">尚未取得股價</span>
+      <button class="ghost" id="refresh" type="button">更新股價</button>
+    </div>
+  </section>
+  <div class="notice warn" id="priceErr" hidden></div>
+
+  <form class="card" id="hForm" autocomplete="off">
+    <h2>新增持股</h2>
+    <div class="row3">
+      <label class="fld"><span>股票代號</span><input class="field num" id="hCode" placeholder="例如 0050" maxlength="8" autocapitalize="characters"></label>
+      <label class="fld"><span>股數</span><input class="field num" id="hShares" inputmode="numeric" placeholder="1000 股＝1 張"></label>
+      <label class="fld"><span>平均成本（每股）</span><input class="field num" id="hCost" inputmode="decimal" placeholder="例如 150.5"></label>
+    </div>
+    <p class="hint" id="hName"></p>
+    <p class="err" id="hErr" hidden></p>
+    <button class="primary" type="submit">加入</button>
+  </form>
+
+  <section class="card" aria-label="持股明細">
+    <h2>持股明細</h2>
+    <div id="holdList"></div>
+    <p class="hint">股價為臺灣證券交易所與櫃買中心公布的每日收盤價，不是盤中即時價。點股價可以手動修改。台股習慣紅色代表賺、綠色代表賠。</p>
+  </section>
+ </div>
+</main>
+
+<!-- ========== 備份 ========== -->
+<main id="view-backup" hidden>
+ <div class="wrap">
+  <header><h1>資料與備份</h1></header>
+  <section class="card">
+    <h2>資料存在哪裡</h2>
+    <p class="hint">所有記帳和持股資料都只存在這支手機（或這台電腦）的瀏覽器裡，不會上傳到任何地方。換手機、刪除 APP 或清除瀏覽資料前，請先匯出備份。</p>
+    <p class="hint" id="counts"></p>
+  </section>
+  <section class="card">
+    <h2>匯出備份</h2>
+    <p class="hint">下載一個備份檔，或複製下面的文字存到記事本。</p>
+    <div class="h-row" style="justify-content:flex-start">
+      <button class="primary" id="exportBtn" type="button" style="padding:10px 16px;font-size:15px">下載備份檔</button>
+      <button class="ghost" id="copyBtn" type="button">複製備份文字</button>
+    </div>
+    <textarea class="field" id="exportText" readonly aria-label="備份文字"></textarea>
+    <p class="ok" id="exportMsg" hidden></p>
+  </section>
+  <section class="card">
+    <h2>還原備份</h2>
+    <p class="hint">選擇備份檔，或把備份文字貼進下面再按「還原」。還原會取代目前的所有資料。</p>
+    <input type="file" id="importFile" accept=".json,application/json" class="field">
+    <textarea class="field" id="importText" placeholder="或貼上備份文字" aria-label="貼上備份文字"></textarea>
+    <div><button class="danger" id="importBtn" type="button">還原</button></div>
+    <p class="err" id="importErr" hidden></p>
+    <p class="ok" id="importMsg" hidden></p>
+  </section>
+  <section class="card">
+    <h2>清除所有資料</h2>
+    <p class="hint">刪除這個裝置上的所有記帳與持股紀錄，無法復原。</p>
+    <div><button class="danger" id="wipeBtn" type="button">清除所有資料</button></div>
+  </section>
+ </div>
+</main>
+
+</div>
+
+<nav class="tabs" aria-label="主選單">
+  <button data-view="ledger" aria-current="page"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>記帳</button>
+  <button data-view="stocks"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>持股</button>
+  <button data-view="backup"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 19h16"/></svg>備份</button>
+</nav>
+
+<script src="app.js"></script>
+</body>
+</html>
